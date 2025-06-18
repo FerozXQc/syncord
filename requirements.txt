@@ -1,0 +1,8 @@
+discord.py
+python-decouple
+logging
+fastapi
+uvicorn
+asyncio
+redis
+python-multipart
