@@ -6,3 +6,4 @@ uvicorn
 asyncio
 redis
 python-multipart
+aiofiles

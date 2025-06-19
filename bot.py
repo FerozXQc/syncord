@@ -57,74 +57,62 @@ async def sendFile(filepath:str):
         print(f'error:{e}')
         return False    
 
-async def fetchFile(message_id:str):
-    channel_id = int(config('CHANNEL_ID'))
-    channel = bot.get_channel(channel_id)
-    if channel:
-        try:
-            msg = await channel.get_message(message_id)
-            if msg.attachments[0]:
-                filename = msg.attachments.filename
-                url = msg.attachments.url
-                async with aiohttp.session() as session:
-                    async with session.get(url) as resp:
-                        if resp.status == 200:
-                            data = await resp.read()
-                            return data
-        except Exception as e:
-            await channel.send(f'file couldnt be fetched, error:{e}')
-            return False
-    else:
-        return f'no channel with the id {channel_id}.'
-
-def file_exists(check_file, filename='files.json'):
+async def fetchChunk(message_id:int,channel:int):
     try:
-        with open(filename, 'r') as file:
-            file_data = json.load(file)
+        msg = await channel.fetch_message(message_id)
+        if msg.attachments[0]:
+            attachment = msg.attachments[0]
+            filename = attachment.filename
+            url = attachment.url
 
-            # Make sure 'files' exists and is a list with at least one dict
-            if 'files' in file_data and isinstance(file_data['files'], list) and len(file_data['files']) > 0:
-                first_entry = file_data['files'][0]
-
-                if check_file in first_entry:
-                    print(first_entry[check_file])
-                    return first_entry[check_file]
+            async with aiohttp.ClientSession() as session:
+                async with session.get(url) as resp:
+                    if resp.status == 200:
+                        data = await resp.read()
+                        return data
     except Exception as e:
-        print(f"Error reading file: {e}")
-
-    return False
-
-def updateList(new_data, filename='files.json'):
-    with open(filename,'r+') as file:
-        file_data = json.load(file)
-        file_data['files'].append(new_data)
-        file.seek(0)
-        json.dump(file_data,file,indent=1)
+        return False
 
 
-# def deleteList(del_data:str, filename='files.json'):
-#     with open(filename,'r+') as file:
-#         file_data = json.load(file)
-#         if del_data in file_data['files'][0]:
-#             print('it exists in list')
-#             del file_data['files'][0][del_data]
-#             file.seek(0)
-#             json.dump(file_data, file, indent=4)
-#             file.truncate() 
-#         else:
-#             print('cant find the file to delete')
+def updateListItem(filename:str, new_data:str, json_path='files.json'):
+    with open(json_path,'r+')  as file:
+        data = json.load(file)
+        while True:
+            if filename in data['files']:
+                filename+='(1)'
+            else:
+                break
+        try:
+            data['files'][filename] = [new_data]
+            file.seek(0)
+            json.dump(data, file, indent=2)
+            file.truncate()
+            return 'ok done'
+        except Exception as e:
+            return f'error:{e}'
 
 
+def fetchList(json_path='files.json'):
+    listContent = []
+    id=1
+    with open(json_path,'r+') as file:
+        data = json.load(file)
+        for i in data['files']:
+            listContent.append(i)
+            id+=1
+    return listContent
 
-# x={
-#     'file1':[
-#         {
-#             'item':'ok'
-#         }
-#     ]
-# }
-
-# deleteList('file1')
-
+def fetchFile(filename:str, json_path='files.json'):
+    with open(json_path, 'r+') as file:
+        data = json.load(file)
+        fetched_file = None
+        if filename in data['files']:
+            fetched_file = data['files'][filename][0]
+            
+        if not fetched_file:
+            return False
+        else:
+            return fetched_file
+        
 
 # bot.run(token,log_handler=handler, log_level=logging.DEBUG)
