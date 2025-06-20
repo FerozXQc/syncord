@@ -145,12 +145,8 @@ def fetchList(indexFile='Index.json'):
 def fetchFileData(filename:str, indexFile='Index.json'):
     indexJSON = r.get(indexFile)
     if not indexJSON:
-        return 'index file not found'
-
-    data = json.loads(indexJSON)
-    if filename in data['files']:
-        fetched_file = data['files'][filename]
-        return fetched_file
+        return False
+        
     if not fetched_file:
         return False
     else:
