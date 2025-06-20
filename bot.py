@@ -26,7 +26,6 @@ async def on_message(message):
     if 'shit' in message.content.lower():
         await message.delete()
         await message.channel.send(f'dont say that {message.author.mention}')
-    
     await bot.process_commands(message)
 
 @bot.command()
@@ -34,7 +33,23 @@ async def hello(ctx):
     await ctx.send(f'hello! {ctx.author.mention}')
 
 
-async def sendFile(filepath:str):
+async def sendIndexFile(filename='Index.json'):
+    channel_id = int(config('CHANNEL_ID'))
+    channel = bot.get_channel(channel_id)
+    if not channel:
+        print('no channel found')
+        return False
+    data = {
+        "files":{}
+    }
+    json_string = json.dumps(data, indent=2)
+    file_bytes = BytesIO(json_string.encode('utf-8'))
+    file_bytes.name = "Index.json"
+    msg = await channel.send(files=[discord.File(file_bytes)])
+    return msg.id
+
+
+async def sendFile(filepath:str,chunk):
     channel_id = int(config('CHANNEL_ID'))
     channel = bot.get_channel(channel_id)
 
@@ -42,16 +57,14 @@ async def sendFile(filepath:str):
         print('no channel found')
         return False
 
-    file_data = r.get(filepath)
+    file_data = chunk
     if not file_data:
         print('no file data found')
         return False
-
     try:
         fileObj = BytesIO(file_data)
         fileObj.name = f'{filepath}.dat'
         msg = await channel.send(file=discord.File(fileObj))
-        r.delete(filepath)    
         return msg.id
     except Exception as e:
         print(f'error:{e}')
@@ -72,47 +85,90 @@ async def fetchChunk(message_id:int,channel:int):
                         return data
     except Exception as e:
         return False
-
-
-def updateListItem(filename:str, new_data:str, json_path='files.json'):
-    with open(json_path,'r+')  as file:
-        data = json.load(file)
-        while True:
-            if filename in data['files']:
-                filename+='(1)'
+        
+async def fetchIndex():
+    message_id = int(config('INDEX_ID'))
+    channel = bot.get_channel(int(config('CHANNEL_ID')))
+    if not channel:
+        return 'no channel'
+    msg = await channel.fetch_message(message_id)
+    if not msg.attachments:
+        return 'no file found.'
+    attachment = msg.attachments[0]
+    filename = "Index.json"
+    url = attachment.url
+    async with aiohttp.ClientSession() as session:
+        async with session.get(url) as resp:
+            if resp.status == 200:
+                content = await resp.read()
+                r.set(filename,content)
             else:
-                break
-        try:
-            data['files'][filename] = [new_data]
-            file.seek(0)
-            json.dump(data, file, indent=2)
-            file.truncate()
-            return 'ok done'
-        except Exception as e:
-            return f'error:{e}'
+                return f'failed to fetch {filename}'
 
+def appendIndex(new_data,file_path,indexFile="Index.json"):
+    indexJSON = r.get(indexFile)
+    if not indexJSON:
+        return 'index file not found'
+        
+    data = json.loads(indexJSON)
+    while file_path in data['files']:
+        file_path+='(1)'
+    data['files'][file_path] = new_data
+    r.set(indexFile,json.dumps(data))
+    return 'file appended successfully'
 
-def fetchList(json_path='files.json'):
+def deleteIndex(del_filename, indexFile="Index.json"):
+    indexJSON = r.get(indexFile)
+    if not indexJSON:
+        return 'index file not found'
+    data = json.loads(indexJSON)
+    if del_filename in data['files']:
+        del data['files'][del_filename]
+        r.set(indexFile,json.dumps(data))
+    
+        return f"{del_filename} removed from index."
+    else:
+        return f"{del_filename} not found in index."
+    
+def fetchList(indexFile='Index.json'):
     listContent = []
-    id=1
-    with open(json_path,'r+') as file:
-        data = json.load(file)
-        for i in data['files']:
-            listContent.append(i)
-            id+=1
+    indexJSON = r.get(indexFile)
+    if not indexJSON:
+        return 'index file not found'
+    id = 1
+    data = json.loads(indexJSON)
+    for i in data['files']:
+        listContent.append(i)
+        id+=1
     return listContent
 
-def fetchFile(filename:str, json_path='files.json'):
-    with open(json_path, 'r+') as file:
-        data = json.load(file)
-        fetched_file = None
-        if filename in data['files']:
-            fetched_file = data['files'][filename][0]
-            
-        if not fetched_file:
-            return False
-        else:
-            return fetched_file
-        
+def fetchFileData(filename:str, indexFile='Index.json'):
+    indexJSON = r.get(indexFile)
+    if not indexJSON:
+        return 'index file not found'
+
+    data = json.loads(indexJSON)
+    if filename in data['files']:
+        fetched_file = data['files'][filename]
+        return fetched_file
+    if not fetched_file:
+        return False
+    else:
+        return fetched_file
+
+async def updateIndex(indexFile="Index.json"):
+    message_id = int(config('INDEX_ID'))
+    channel = bot.get_channel(int(config('CHANNEL_ID')))
+    indexJSON = r.get(indexFile)
+    if not indexJSON:
+        return 'index file not found'
+    data = json.loads(indexJSON)
+    json_string = json.dumps(data, indent=2)
+    file_bytes = BytesIO(json_string.encode('utf-8'))
+    file_bytes.name = "Index.json"
+    if not channel:
+        return 'no channel'
+    msg = await channel.fetch_message(message_id)
+    await msg.edit(attachments=[discord.File(file_bytes)])
 
 # bot.run(token,log_handler=handler, log_level=logging.DEBUG)

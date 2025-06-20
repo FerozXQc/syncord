@@ -1,10 +1,11 @@
 from fastapi import FastAPI, File, UploadFile
 import uvicorn
-from bot import bot, sendFile, updateListItem, fetchList, fetchFile, fetchChunk
+from bot import bot, sendFile, fetchChunk,fetchIndex, sendIndexFile,appendIndex,deleteIndex,updateIndex,fetchList,fetchFileData
 from decouple import config
 import asyncio
-from redis_client import r
 import time
+from io import BytesIO
+from redis_client import r
 import aiofiles
 import json
 import os
@@ -13,16 +14,27 @@ app = FastAPI()
 
 @app.on_event("startup")
 async def startup_event():
+    async def start_bot_and_fetch():
+        await bot.wait_until_ready()
+        await fetchIndex()
     asyncio.create_task(bot.start(config("DISCORD_TOKEN")))
+    asyncio.create_task(start_bot_and_fetch())
 
+#use this to initialise the index.json file and get its message Id
+@app.post('/createIndexFile')
+async def init_index():
+    result = await sendIndexFile()
+    await fetchIndex()
+    
+#USE THIS ONCE AND NOTE DOWN YOUR MESSAGE ID.
+    
 @app.get('/')
 def hello():
     return 'hewwo:3'
 
-chunk_size = 8*1024*1024 #8mb
-
 @app.post("/sendFile")
 async def send_file_to_discord(file: UploadFile = File(...)):
+    chunk_size = 8*1024*1024 #8mb
     chunk_num=1
     # time_taken=0
     file_path = file.filename
@@ -33,18 +45,13 @@ async def send_file_to_discord(file: UploadFile = File(...)):
         if not chunk:
             break
         key = f'{file_path}_{str(chunk_num).zfill(6)}'
-        r.set(key,chunk)
-        file_id = await sendFile(key)
+        file_id = await sendFile(key,chunk)
         chunk_list.append({'message_id':file_id, 'chunk_num':chunk_num})
-        # end = time.perf_counter()
-        # time_taken+= round(end-start,2)
-        # print(file_id,time_taken)
         chunk_num+=1
-    # print(time_taken/chunk_num)##to check the upload speed..   
-    result = updateListItem(file_path, chunk_list)
-    print(result)
-
-
+        
+    result = appendIndex(new_data=chunk_list,file_path=file_path)
+    await updateIndex()
+    return result
 
 @app.post('/viewListItem')
 def viewListItem():
@@ -62,23 +69,23 @@ async def deleteListItem(filename:str,json_path='files.json'):
     if not channel:
         return 'channel not found'
 
-    fetched_data = fetchFile(filename)
+    fetched_data = fetchFileData(filename)
+    print(fetched_data)
     if not fetched_data:
         return 'file not found'
     for chunk in fetched_data:
+        print(chunk['message_id'])
         try:
             msg = await channel.fetch_message(int(chunk['message_id']))
             await msg.delete()
         except Exception as e:
-            print(f"Failed to delete message {chunk['message_id']}: {e}")
+            print(f"failed to get message: {e}")
+            return False
     
-    with open(json_path,'r+') as file:
-        data = json.load(file)
-        del data['files'][filename]
-        file.seek(0)
-        json.dump(data, f, indent=2)
-        file.truncate()
-        return 'deleted'
+    result = deleteIndex(filename)
+    await updateIndex()
+    return result
+
    
 @app.post('/recieveFile')
 async def recieveFile(filename:str):
@@ -87,7 +94,7 @@ async def recieveFile(filename:str):
    
     if not channel:
         return 'channel not found'
-    fetched_data = fetchFile(filename)
+    fetched_data = fetchFileData(filename)
     if not fetched_data:
         return 'file not found'
     while True:
@@ -103,6 +110,8 @@ async def recieveFile(filename:str):
                 return f"Failed to fetch chunk {chunk['message_id']}"
             await file.write(data)
     return f'file:{filename} saved'
+
+
 
 if __name__ == '__main__':
     uvicorn.run("app:app", host="127.0.0.1", port=8000, reload=True)
