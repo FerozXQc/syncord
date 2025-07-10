@@ -146,7 +146,9 @@ def fetchFileData(filename:str, indexFile='Index.json'):
     indexJSON = r.get(indexFile)
     if not indexJSON:
         return False
-        
+    data = json.loads(indexJSON)
+    fetched_file = data['files'][filename] 
+    # print(fetched_file) debugging
     if not fetched_file:
         return False
     else:
