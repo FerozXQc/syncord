@@ -75,13 +75,13 @@ docker-compose up --build
 
 ## 💡 Usage
 
-By default, Syncord listens for file upload/download commands through a Discord bot.
+Access your Syncord file gateway via:
 
-Example:  
-- `!upload myfile.txt`
-- `!download myfile.txt`
+    http://localhost:8000/docs – Swagger UI to upload/download files.
 
-Or use the included API/CLI (`app.py`) to script file sends or automation.
+    The backend automatically relays files through Discord using the bot.
+
+No commands needed inside Discord. All interactions happen via the FastAPI endpoints.
 
 ---
 
