@@ -36,17 +36,41 @@ async def hello(ctx):
 async def sendIndexFile(filename='Index.json'):
     channel_id = int(config('CHANNEL_ID'))
     channel = bot.get_channel(channel_id)
+    
     if not channel:
-        print('no channel found')
+        print('No channel found')
         return False
+
+    # Prepare index data
     data = {
-        "files":{}
+        "files": {}
     }
+
     json_string = json.dumps(data, indent=2)
     file_bytes = BytesIO(json_string.encode('utf-8'))
-    file_bytes.name = "Index.json"
+    file_bytes.name = filename
+
+    env_path = '.env'
+    index_key = 'INDEX_ID'
+
+    # Check .env file
+    if not os.path.exists(env_path):
+        return 'No .env file found!!'
+
+    with open(env_path, 'r') as f:
+        lines = f.readlines()
+        for line in lines:
+            if line.strip().replace(" ", "").startswith(f"{index_key}="):
+                print('INDEX_ID already exists!')
+                raise HTTPException(status_code=400, detail="INDEX_ID already exists!")
+
+    # Send file to Discord
     msg = await channel.send(files=[discord.File(file_bytes)])
-    return msg.id
+    # Append INDEX_ID to .env
+    with open(env_path, 'a') as f:
+        f.write(f'\n{index_key}={msg.id}\n')
+    print(f"Index file sent. Message ID: {msg.id}")
+    return True
 
 
 async def sendFile(filepath:str,chunk):
